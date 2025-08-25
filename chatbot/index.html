@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Nova // Echo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Nova+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --neon-green: #39ff14; --electric-blue: #00ffff; --magenta: #ff00ff;
+            --cyber-purple: #8A2BE2; --background-color: #0d0208;
+            --glow-color: rgba(57, 255, 20, 0.4); --retro-font: 'VT323', monospace;
+            --futuristic-font: 'Nova Mono', monospace;
+        }
+        html, body {
+            margin: 0; padding: 0; height: 100%; width: 100%;
+            background-color: var(--background-color); color: var(--neon-green);
+            font-family: var(--retro-font); font-size: 1.5em; overflow: hidden;
+        }
+        body { text-shadow: 0 0 5px var(--glow-color); }
+        .terminal-window {
+            padding: 20px; height: 100vh; box-sizing: border-box;
+            display: flex; flex-direction: column; justify-content: flex-end;
+        }
+        #terminal-output { flex-grow: 1; overflow-y: auto; width: 100%; display: flex; flex-direction: column; }
+        #terminal-output pre { white-space: pre-wrap; margin: 5px 0; font-family: inherit; }
+        .terminal-prompt { display: none; align-items: center; width: 100%; }
+        .prompt-user { color: var(--electric-blue); margin-right: 10px; }
+        #terminal-input-container { display: flex; flex-grow: 1; align-items: center; }
+        #terminal-input {
+            background: transparent; border: none; color: var(--magenta);
+            font-family: var(--retro-font); font-size: 1em; flex-grow: 1; outline: none;
+            text-shadow: 0 0 5px var(--magenta);
+        }
+        .cursor { width: 0.8em; height: 1.2em; background-color: var(--magenta); animation: blink 1s steps(1) infinite; margin-left: 5px; }
+        @keyframes blink { 50% { background-color: transparent; } }
+        .scanline { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; background: repeating-linear-gradient(0deg, rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(255,255,255,0.05) 0, rgba(255,255,255,0.05) 4px); }
+        .user-command, .echo-response { max-width: 80%; margin-bottom: 15px; }
+        .error-message pre { color: red !important; }
+        .user-command pre { color: var(--magenta); }
+        .echo-response pre { color: var(--neon-green); }
+
+        /* --- REVERTED OUTRO STYLE --- */
+        .system-message-container {
+            width: 100%; display: flex; justify-content: center; align-items: center;
+            flex-grow: 1; text-align: center; font-family: var(--futuristic-font);
+            font-size: 1.1em;
+        }
+        .intro-glitch { animation: smooth-glitch 2s infinite; }
+        /* The .outro-container class with the purple background has been removed. */
+        .system-message-container pre { color: var(--electric-blue); }
+
+        @keyframes smooth-glitch {
+            0% { opacity: 1; text-shadow: 0 0 5px var(--neon-green); }
+            50% { opacity: 0.9; text-shadow: 0 0 10px var(--electric-blue); }
+            100% { opacity: 1; text-shadow: 0 0 5px var(--neon-green); }
+        }
+    </style>
+</head>
+<body>
+    <div class="scanline"></div>
+    <div class="terminal-window">
+        <div id="terminal-output"></div>
+        <div class="terminal-prompt" id="prompt" style="display: none;">
+            <span class="prompt-user">operator@nova:~$</span>
+            <div id="terminal-input-container">
+                <input type="text" id="terminal-input" />
+                <div class="cursor"></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const terminalOutput = document.getElementById('terminal-output');
+        const terminalInput = document.getElementById('terminal-input');
+        const promptElement = document.getElementById('prompt');
+        const API_BASE_URL = 'http://127.0.0.1:5000';
+        const TYPING_SPEED = 40;
+        let conversationHistory = [];
+        let isLoading = false;
+
+        function typeWriter(element, text, callback) {
+            let i = 0;
+            element.innerHTML = "";
+            function typing() {
+                if (i < text.length) {
+                    element.innerHTML += text.charAt(i); i++;
+                    terminalOutput.scrollTop = terminalOutput.scrollHeight;
+                    setTimeout(typing, TYPING_SPEED);
+                } else if (callback) { callback(); }
+            }
+            typing();
+        }
+
+        function appendChatMessage(role, text) {
+            const div = document.createElement('div');
+            div.className = role === 'user' ? 'user-command' : 'echo-response';
+            const pre = document.createElement('pre');
+            pre.textContent = role === 'user' ? text : 'ECHO: ' + text;
+            div.appendChild(pre);
+            terminalOutput.appendChild(div);
+            terminalOutput.scrollTop = terminalOutput.scrollHeight;
+            return div;
+        }
+
+        async function getEchoResponse() {
+            if (isLoading) return;
+            const userMessage = terminalInput.value.trim();
+            if (!userMessage) return;
+            isLoading = true; terminalInput.disabled = true; terminalInput.value = '';
+            conversationHistory.push({ role: 'user', parts: [{ text: userMessage }] });
+            appendChatMessage('user', userMessage);
+            try {
+                const response = await fetch(`${API_BASE_URL}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ history: conversationHistory }) });
+                if (!response.ok) throw new Error(`Server Error (HTTP ${response.status})`);
+                const data = await response.json();
+                const aiText = data.response || "Silence...";
+                conversationHistory.push({ role: 'model', parts: [{ text: aiText }] });
+                const echoMessageDiv = appendChatMessage('model', '');
+                typeWriter(echoMessageDiv.querySelector('pre'), `ECHO: ${aiText}`, () => {
+                    isLoading = false; terminalInput.disabled = false; terminalInput.focus();
+                    if (aiText.includes("Project Nova is in your hands.")) {
+                        playOutro();
+                    }
+                });
+            } catch (error) {
+                appendChatMessage('error-message', `System Alert: ${error.message}`);
+                isLoading = false; terminalInput.disabled = false; terminalInput.focus();
+            }
+        }
+
+        async function playStorySequence(endpoint, type, callback) {
+            terminalOutput.innerHTML = '';
+            promptElement.style.display = 'none';
+            try {
+                const response = await fetch(`${API_BASE_URL}${endpoint}`);
+                if (!response.ok) throw new Error(`Could not fetch sequence from ${endpoint}`);
+                const data = await response.json();
+                const container = document.createElement('div');
+                container.className = 'system-message-container';
+                if (type === 'intro') {
+                    container.classList.add('intro-glitch');
+                }
+                // No special class needed for 'outro' anymore
+                const pre = document.createElement('pre');
+                container.appendChild(pre);
+                terminalOutput.appendChild(container);
+                typeWriter(pre, data.text, () => {
+                    if (type === 'intro') {
+                        container.classList.remove('intro-glitch');
+                    }
+                    if (callback) callback();
+                });
+            } catch (error) {
+                terminalOutput.innerHTML = `<div class="error-message"><pre>FATAL ERROR: ${error.message}</pre></div>`;
+            }
+        }
+        
+        function playOutro() {
+            playStorySequence('/outro', 'outro', () => {
+                terminalInput.disabled = true;
+            });
+        }
+        
+        function startChat() {
+            terminalOutput.innerHTML = '';
+            promptElement.style.display = 'flex';
+            terminalInput.disabled = false; terminalInput.focus();
+            isLoading = false;
+        }
+
+        terminalInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') { getEchoResponse(); }
+        });
+
+        document.addEventListener('DOMContentLoaded', () => playStorySequence('/intro', 'intro', startChat));
+    </script>
+</body>
+</html>
