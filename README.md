@@ -44,18 +44,6 @@ You are an anonymous operator, the last hope of a resistance movement, and your 
 
 ---
 
-## Project Structure
-project-nova/
-│
-├── app.py          # The main Flask backend server and AI logic
-├── index.html      # The all-in-one frontend application
-├── .env            # Your secret API key file
-└── README.md       # This file
-
-
-
----
-
 ## Setup and Installation
 
 Follow these steps to get Project Nova running on your local machine.
